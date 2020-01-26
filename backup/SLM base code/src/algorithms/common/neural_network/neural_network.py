@@ -242,6 +242,8 @@ class ConvNeuralNetwork(object):
 
 
         self.flatten_layer = array([Sensor(d) for d in flatten_layer])
+        #todo tak zupelnie nie moze byc liczba innput_connections powinna byc dokladnie idealna !!!! cos tu nie gra do naprawy!!!
+        self._connect_flat_hidden(self.flatten_layer, self.hidden_layers[0])
         self.load_semantic_after_flat_layer()
 
         for hidden_layer in self.hidden_layers:
@@ -266,6 +268,13 @@ class ConvNeuralNetwork(object):
                 connection.from_node.semantics = flat_data.semantics
             self.bias.semantics = np.array([1 for i in range(flat_data.semantics.shape[0])])
 
+    def _connect_flat_hidden(self, from_nodes, to_nodes):
+
+        for to_node in to_nodes:
+            #todo to trzeba zdecydowanie wywalic to jest bardzo bardzo zle !!!! nie mozna tak
+            to_node.input_connections = []
+            for from_node in from_nodes:
+                Connection(from_node, to_node, uniform(-2, 2))
 
     def load_sensors(self, X):
         """Loads input variables of dataset into sensors. Adjusts length of bias."""

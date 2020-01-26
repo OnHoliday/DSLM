@@ -12,7 +12,7 @@ import pandas as pd
 # Returns the current date and time.
 _now = datetime.datetime.now()
 
-_OUTER_FOLDS = 30
+_OUTER_FOLDS = 2
 _INNER_FOLDS = 2
 
 

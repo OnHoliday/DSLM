@@ -66,12 +66,8 @@ class Neuron(Node):
         try:
             return np.sum([connection.from_node.semantics * connection.weight for connection in self.input_connections], axis=0)
         except ValueError:
-            i = 0
             for connection in self.input_connections:
-                i += 1
-
                 if len(connection.from_node.semantics) == 0:
-                    print(connection.from_node.semantics, i)
                     connection.from_node.semantics = np.ones(shape=self.input_connections[0].from_node.semantics.shape[0])
             return np.sum([connection.from_node.semantics * connection.weight for connection in self.input_connections], axis=0)
 
