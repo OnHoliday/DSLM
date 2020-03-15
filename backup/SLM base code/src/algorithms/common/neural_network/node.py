@@ -1,7 +1,7 @@
 import numpy as np
 from algorithms.common.neural_network.activation_function import calculate_output
 from copy import copy, deepcopy
-
+from numba import jit
 
 class Node(object):
     """
@@ -64,12 +64,12 @@ class Neuron(Node):
         # return np.sum([connection.from_node.semantics * connection.weight for connection in self.input_connections],
         #               axis=0)
         try:
-            return np.sum([connection.from_node.semantics * connection.weight for connection in self.input_connections], axis=0)
+            return np.sum((connection.from_node.semantics * connection.weight for connection in self.input_connections), axis=0)
         except ValueError:
             for connection in self.input_connections:
                 if len(connection.from_node.semantics) == 0:
                     connection.from_node.semantics = np.ones(shape=self.input_connections[0].from_node.semantics.shape[0])
-            return np.sum([connection.from_node.semantics * connection.weight for connection in self.input_connections], axis=0)
+            return np.sum((connection.from_node.semantics * connection.weight for connection in self.input_connections), axis=0)
 
 
     def _calculate_output(self, weighted_input):
@@ -202,10 +202,10 @@ class ConvNeuron(Neuron):
 
     def _initialize_parameters(self):
         self.nr_of_channel = 1
-        self.kernel_size = np.random.randint(2, 7)
+        self.kernel_size = np.random.randint(2, 4)
         self.stride = np.random.randint(1, 3)
         # prepare yourself for different number of channels not only RGB but also 1 dim black/white
-        self.filter = np.random.uniform(-1, 1, (self.kernel_size, self.kernel_size, 3))
+        self.filter = np.random.uniform(-1, 1, (self.kernel_size, self.kernel_size, 1))
 
     def get_sizes(self, input_pic_array):
         self.input_width = input_pic_array.shape[0]
@@ -222,27 +222,7 @@ class ConvNeuron(Neuron):
         semantics_array = np.array(all_semantics).reshape((32, 32, 3, sensors[0].semantics.shape[-1]))
         input_pic_array = semantics_array[:, :, :, 0]
         self.get_sizes(input_pic_array)
-        dataset_whole_output = np.zeros(
-            (self.output_width, self.output_length, self.dimenstions, semantics_array.shape[3]))
-        for s in range(semantics_array.shape[3]):
-            # print(s)
-            input_pic_array = semantics_array[:, :, :, s]
-            self.get_sizes(input_pic_array)
-            whole_output = np.zeros((self.output_width, self.output_length, self.dimenstions))
-            col = 0
-            for j in range(0, self.input_length - self.kernel_size + 1, self.stride):
-                row_output = np.zeros((self.output_width, self.dimenstions))
-                row = 0
-                for i in range(0, self.input_length - self.kernel_size + 1, self.stride):
-                    new_array = input_pic_array[i:(i + self.kernel_size), j:(j + self.kernel_size), :]
-
-                    output = np.multiply(new_array, self.filter)
-                    row_output[row, :] = np.sum(output, axis=(0,1))
-                    row += 1
-                whole_output[:, col, :] = row_output
-                col += 1
-            dataset_whole_output[:, :, :, s] = whole_output
-        return dataset_whole_output
+        return convolv(semantics_array, self.output_width, self.output_length, self.input_width, self.input_length, self.dimenstions, self.kernel_size, self.stride, self.filter)
 
     def convolv2(self):
         all_semantics = []
@@ -253,27 +233,7 @@ class ConvNeuron(Neuron):
         semantics_array = np.array(all_semantics).reshape((all_semantics.shape[0], all_semantics.shape[1], 3, sensors[0].semantics.shape[-1]))
         input_pic_array = semantics_array[:, :, :, 0]
         self.get_sizes(input_pic_array)
-        dataset_whole_output = np.zeros(
-            (self.output_width, self.output_length, self.dimenstions, semantics_array.shape[3]))
-        for s in range(semantics_array.shape[3]):
-            # print(s)
-            input_pic_array = semantics_array[:, :, :, s]
-            self.get_sizes(input_pic_array)
-            whole_output = np.zeros((self.output_width, self.output_length, self.dimenstions))
-            col = 0
-            for j in range(0, self.input_length - self.kernel_size + 1, self.stride):
-                row_output = np.zeros((self.output_width, self.dimenstions))
-                row = 0
-                for i in range(0, self.input_length - self.kernel_size + 1, self.stride):
-                    new_array = input_pic_array[i:(i + self.kernel_size), j:(j + self.kernel_size), :]
-
-                    output = np.multiply(new_array, self.filter)
-                    row_output[row, :] = np.sum(output, axis=(0,1))
-                    row += 1
-                whole_output[:, col, :] = row_output
-                col += 1
-            dataset_whole_output[:, :, :, s] = whole_output
-        return dataset_whole_output
+        return convolv(semantics_array, self.output_width, self.output_length, self.input_width, self.input_length, self.dimenstions, self.kernel_size, self.stride, self.filter)
 
 
     def _calculate_output(self, weighted_input):
@@ -312,6 +272,7 @@ class PoolNeuron(Neuron):
 
     def _initialize_parameters(self):
         self.pool_size = np.random.randint(1, 5)
+        self.stride = np.random.randint(1, 3)
         self.operation = 'max'
 
 
@@ -319,8 +280,9 @@ class PoolNeuron(Neuron):
         self.input_width = input_pic_array.shape[0]
         self.input_length = input_pic_array.shape[1]
         self.dimenstions = input_pic_array.shape[2]
-        self.output_width = input_pic_array.shape[0] - self.pool_size + 1
-        self.output_length = input_pic_array.shape[1] - self.pool_size + 1
+        self.output_width = int(np.ceil((input_pic_array.shape[0] - self.pool_size + 1) / self.stride))
+        self.output_length = int(np.ceil((input_pic_array.shape[1] - self.pool_size + 1) / self.stride))
+
 
     def pool(self):
         all_semantics = []
@@ -329,23 +291,7 @@ class PoolNeuron(Neuron):
         semantics_array = np.array(all_semantics).reshape((int(np.sqrt(len(sensors)/3)), int(np.sqrt(len(sensors)/3)), 3, sensors[0].semantics.shape[-1]))
         input_pic_array = semantics_array[:, :, :, 0]
         self.get_sizes(input_pic_array)
-        dataset_whole_output = np.zeros((self.output_width, self.output_length, self.dimenstions, semantics_array.shape[3]))
-        for s in range(semantics_array.shape[3]):
-            # print(s)
-            input_pic_array = semantics_array[:, :, :, s]
-            whole_output = np.zeros((self.output_width, self.output_length, self.dimenstions))
-            col = 0
-            for j in range(self.input_length-self.pool_size+1):
-                row_output = np.zeros((self.output_width, self.dimenstions))
-                row = 0
-                for i in range(self.input_width-self.pool_size+1):
-                    new_array = input_pic_array[i:(i + self.pool_size), j:(j + self.pool_size), :]
-                    row_output[row, :] = np.max(new_array, axis=(0,1))
-                    row += 1
-                whole_output[:,col, :] = row_output
-                col += 1
-            dataset_whole_output[:, :, :, s] = whole_output
-        return dataset_whole_output
+        return pool(semantics_array, self.output_width, self.output_length, self.input_width, self.input_length, self.dimenstions, self.pool_size, self.stride)
 
     def pool2(self):
         all_semantics = []
@@ -355,24 +301,7 @@ class PoolNeuron(Neuron):
         semantics_array = np.array(all_semantics).reshape((all_semantics.shape[0], all_semantics.shape[1], 3, sensors[0].semantics.shape[-1]))
         input_pic_array = semantics_array[:, :, :, 0]
         self.get_sizes(input_pic_array)
-        dataset_whole_output = np.zeros((self.output_width, self.output_length, self.dimenstions, semantics_array.shape[3]))
-        for s in range(semantics_array.shape[3]):
-            # print(s)
-            input_pic_array = semantics_array[:, :, :, s]
-            whole_output = np.zeros((self.output_width, self.output_length, self.dimenstions))
-            col = 0
-            for j in range(self.input_length-self.pool_size+1):
-                row_output = np.zeros((self.output_width, self.dimenstions))
-                row = 0
-                for i in range(self.input_width-self.pool_size+1):
-                    new_array = input_pic_array[i:(i + self.pool_size), j:(j + self.pool_size), :]
-                    row_output[row, :] = np.max(new_array, axis=(0, 1))
-                    row += 1
-                whole_output[:, col, :] = row_output
-                col += 1
-            dataset_whole_output[:, :, :, s] = whole_output
-        return dataset_whole_output
-
+        return pool(semantics_array, self.output_width, self.output_length, self.input_width, self.input_length, self.dimenstions, self.pool_size, self.stride)
 
     def _calculate_output(self, weighted_input):
         """Calculates semantics, based on weighted input."""
@@ -386,3 +315,88 @@ class PoolNeuron(Neuron):
         """Calculates weighted input, then calculates semantics."""
         self.semantics = self.pool2()
 
+@jit(nopython=True, fastmath=True)
+def convolv2(semantics_array, output_width, output_length,input_width, input_length, dimenstions, kernel_size, stride, filter):
+    dataset_whole_output = np.zeros(
+        (output_width, output_length, dimenstions, semantics_array.shape[3]))
+    for s in range(semantics_array.shape[3]):
+        # print(s)
+        input_pic_array = semantics_array[:, :, :, s]
+        whole_dim_output = np.zeros((output_width, output_length, dimenstions))
+        for dim in range(semantics_array.shape[2]):
+            input_pic_array_dim = input_pic_array[:, :, dim]
+            whole_output = np.zeros((output_width, output_length))
+            col = 0
+            for j in range(0, input_width - kernel_size + 1, stride):
+                row_output = np.zeros((output_width,))
+                row = 0
+                for i in range(0, input_length - kernel_size + 1, stride):
+                    new_array = input_pic_array_dim[i:(i + kernel_size), j:(j + kernel_size)]
+                    output = np.multiply(new_array, filter)
+                    row_output[row] = np.sum(output)
+                    #                row_output[row, :] = np.sum(output)
+                    row += 1
+                whole_output[:, col] = row_output
+                col += 1
+            whole_dim_output[:, :, dim] = whole_output
+        dataset_whole_output[:, :, :, s] = whole_dim_output
+    return dataset_whole_output
+
+# @jit(nopython=True, fastmath=True)
+def convolv(semantics_array, output_width, output_length,input_width, input_length, dimenstions, kernel_size, stride, filter):
+    filter = np.random.randint(-2, 2, (kernel_size, kernel_size, semantics_array.shape[2], semantics_array.shape[3]))
+    input_pic_array = semantics_array
+    dataset_whole_output = np.zeros(
+        (output_width, output_length, dimenstions, semantics_array.shape[3]))
+    col = 0
+    for j in range(0, input_length - kernel_size + 1, stride):
+        row_output = np.zeros((output_width, dimenstions, semantics_array.shape[3]))
+        row = 0
+        for i in range(0, input_width - kernel_size + 1, stride):
+            new_array = input_pic_array[i:(i + kernel_size), j:(j + kernel_size), :, :]
+
+            output = np.multiply(new_array, filter)
+            row_output[row, :, :] = np.sum(output, axis=(0,1))
+            row += 1
+        dataset_whole_output[:, col, :, :] = row_output
+        col += 1
+    return dataset_whole_output
+
+@jit(nopython=True, parallel=True)
+def pool2(semantics_array, output_width, output_length,input_width, input_length, dimenstions, pool_size):
+    dataset_whole_output = np.zeros((output_width, output_length, dimenstions, semantics_array.shape[3]))
+    for s in range(semantics_array.shape[3]):
+        # print(s)
+        input_pic_array = semantics_array[:, :, :, s]
+        whole_dim_output = np.zeros((output_width, output_length, dimenstions))
+        for dim in range(semantics_array.shape[2]):
+            input_pic_array_dim = input_pic_array[:, :, dim]
+            whole_output = np.zeros((output_width, output_length))
+            col = 0
+            for j in range(input_length - pool_size + 1):
+                row_output = np.zeros((output_width,))
+                row = 0
+                for i in range(input_width - pool_size + 1):
+                    new_array = input_pic_array_dim[i:(i + pool_size), j:(j + pool_size)]
+                    row_output[row] = np.max(new_array)
+                    row += 1
+                whole_output[:, col] = row_output
+                col += 1
+            whole_dim_output[:, :, dim] = whole_output
+        dataset_whole_output[:, :, :, s] = whole_dim_output
+    return dataset_whole_output
+
+def pool(semantics_array, output_width, output_length,input_width, input_length, dimenstions, pool_size, stride):
+    dataset_whole_output = np.zeros((output_width, output_length, dimenstions, semantics_array.shape[3]))
+    input_pic_array = semantics_array
+    col = 0
+    for j in range(0,input_length - pool_size + 1, stride):
+        row_output = np.zeros((output_width, dimenstions, semantics_array.shape[3]))
+        row = 0
+        for i in range(0,input_width - pool_size + 1, stride):
+            new_array = input_pic_array[i:(i + pool_size), j:(j + pool_size), :, :]
+            row_output[row, :, :] = np.max(new_array, axis=(0, 1))
+            row += 1
+        dataset_whole_output[:, col, :, :] = row_output
+        col += 1
+    return dataset_whole_output

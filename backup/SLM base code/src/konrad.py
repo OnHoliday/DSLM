@@ -2,7 +2,23 @@ from benchmark.new_benchmarker import Benchmarker
 from benchmark.new_configuration import SLM_OLS, DSLM_OLS
 from benchmark.training_benchmarker import TrainingBenchmarker
 from metric import Cross_entropy, Multiclass_Accuracy
+import cProfile, pstats, io
 
+def profile(fnc):
+    def inner(*args, **kwargs):
+        pr = cProfile.Profile()
+        pr.enable()
+        retval = fnc(*args, **kwargs)
+        pr.disable()
+        s = io.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        print(s.getvalue())
+        return retval
+    return inner
+
+@profile
 def generalization_benchmark2(dataset_name):
     models_to_run = DSLM_OLS
     benchmarker = Benchmarker(dataset_name, models=models_to_run, benchmark_id='slm_generalization', file_path='D:\SLM_CNN\cifar-10-batches-py', learning_metric=Multiclass_Accuracy, selection_metric=Multiclass_Accuracy)
@@ -25,11 +41,14 @@ def generalization_benchmark2(dataset_name):
 #     benchmarker.run_nested_cv()
 
 
+
+
 if __name__ == '__main__':
     
     # dataset = 'c_credit'
     dataset = 'data_batch_1'
     """ Generalization benchmark on a classification dataset """
+
     generalization_benchmark2(dataset)
     """ Training benchmark on a classification dataset """
     # training_benchmark(dataset)

@@ -20,6 +20,7 @@ from algorithms.semantic_learning_machine.mutation_operator import Mutation_CNN_
 from algorithms.semantic_learning_machine.solution import Solution
 
 
+
 class DeepSemanticLearningMachine(EvolutionaryAlgorithm):
     """
     Class represents Semantic Learning Machine (SLM) algorithms:
