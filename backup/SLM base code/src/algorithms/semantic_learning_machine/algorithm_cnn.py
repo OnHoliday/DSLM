@@ -258,8 +258,9 @@ class DeepSemanticLearningMachine(EvolutionaryAlgorithm):
             else:
                 from_nodes_sample = from_nodes
             # Connect to_node to each node in from_node_sample.
-            for from_node in from_nodes_sample:
-                Connection(from_node, to_node, self._get_connection_weight(weight))
+            # for from_node in from_nodes_sample:
+            #     Connection(from_node, to_node, self._get_connection_weight(weight))
+            (Connection(from_node, to_node, self._get_connection_weight(weight)) for from_node in from_nodes_sample)
 
     def _connect_nodes_mutation(self, hidden_layers):
         """Connects new mutation neurons to remainder of network."""

@@ -64,7 +64,8 @@ class Neuron(Node):
         # return np.sum([connection.from_node.semantics * connection.weight for connection in self.input_connections],
         #               axis=0)
         try:
-            return np.sum((connection.from_node.semantics * connection.weight for connection in self.input_connections), axis=0)
+            return np.sum((np.multiply(connection.from_node.semantics, connection.weight) for connection in self.input_connections), axis=0)
+            # return np.sum((connection.from_node.semantics * connection.weight for connection in self.input_connections), axis=0)
         except ValueError:
             for connection in self.input_connections:
                 if len(connection.from_node.semantics) == 0:
@@ -215,10 +216,8 @@ class ConvNeuron(Neuron):
         self.output_length = int(np.ceil((input_pic_array.shape[1] - self.kernel_size + 1) / self.stride))
 
     def convolv(self):
-        all_semantics = []
         sensors = self.input_connections[0].from_node
-        # print(len(sensors))
-        [all_semantics.append(sensor.semantics) for sensor in sensors]
+        all_semantics = [sensor.semantics for sensor in sensors]
         semantics_array = np.array(all_semantics).reshape((32, 32, 3, sensors[0].semantics.shape[-1]))
         input_pic_array = semantics_array[:, :, :, 0]
         self.get_sizes(input_pic_array)
@@ -285,9 +284,8 @@ class PoolNeuron(Neuron):
 
 
     def pool(self):
-        all_semantics = []
         sensors = self.input_connections[0].from_node
-        [all_semantics.append(sensor.semantics) for sensor in sensors]
+        all_semantics = [sensor.semantics for sensor in sensors]
         semantics_array = np.array(all_semantics).reshape((int(np.sqrt(len(sensors)/3)), int(np.sqrt(len(sensors)/3)), 3, sensors[0].semantics.shape[-1]))
         input_pic_array = semantics_array[:, :, :, 0]
         self.get_sizes(input_pic_array)
